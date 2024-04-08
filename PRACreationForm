@@ -1,0 +1,14 @@
+<template>
+    <div class="slds-box slds-theme_default">
+        <div class="slds-p-around_medium">
+            <input type="hidden" data-id="assetId" value={assetId}></input>
+            <lightning-input label="Asset Name" value={assetName} readonly data-id="assetId"></lightning-input>
+            <lightning-input label="Product Name" value={productName} readonly data-id="productId"></lightning-input>
+            <input type="hidden" data-id="contactId" value={contactId}></input>
+            <lightning-input label="Contact Name" value={contactName} readonly data-id="contactId"></lightning-input>
+            <lightning-input label="Reason" value={reason} onchange={handleReasonChange}></lightning-input>
+            <lightning-input type="file" label="Upload Files" onchange={handleFileChange} multiple></lightning-input>
+            <lightning-button label="Save" onclick={handleSave} class="slds-m-top_medium"></lightning-button>
+        </div>
+        </div>
+</template>
