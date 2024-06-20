@@ -1,0 +1,135 @@
+<template>
+    <lightning-button label="Generate PDF Preview" onclick={generatePDF}></lightning-button>
+    <template if:true={pdfData}>
+        <iframe src={pdfData} width="100%" height="600px"></iframe>
+        <lightning-button label="Save PDF" onclick={savePDF}></lightning-button>
+    </template>
+</template>
+
+
+
+import { LightningElement, api, track } from 'lwc';
+import generatePDF from '@salesforce/apex/OrderDetailsController.generatePDF';
+import savePDFAsContent from '@salesforce/apex/OrderDetailsController.savePDFAsContent';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+
+export default class PdfGenerator extends LightningElement {
+    @api recordId;
+    @track pdfData;
+
+    generatePDF() {
+        generatePDF({ recordId: this.recordId })
+            .then(base64Data => {
+                this.pdfData = 'data:application/pdf;base64,' + base64Data;
+                this.showToast('Success', 'PDF generated successfully', 'success');
+            })
+            .catch(error => {
+                this.showToast('Error', 'Error generating PDF: ' + error.body.message, 'error');
+            });
+    }
+
+    savePDF() {
+        savePDFAsContent({ recordId: this.recordId })
+            .then(contentDocumentLinkId => {
+                this.showToast('Success', 'PDF saved successfully', 'success');
+                this.pdfData = null; // Clear the preview after saving
+            })
+            .catch(error => {
+                this.showToast('Error', 'Error saving PDF: ' + error.body.message, 'error');
+            });
+    }
+
+    showToast(title, message, variant) {
+        const event = new ShowToastEvent({
+            title,
+            message,
+            variant
+        });
+        this.dispatchEvent(event);
+    }
+}
+
+
+
+public class OrderDetailsController {
+    public List<OrderItem> orderDetails { get; set; }
+
+    public OrderDetailsController() {
+        // Populate the list with some example data for now
+        orderDetails = new List<OrderItem>{
+            new OrderItem(1, 'OC', 'OTHER CHARGES - LABOUR CHARGES (INSPECTION)', '', 1, 450.00, 381.36, 'CGST', 9, 34.32, 450.00),
+            new OrderItem(2, 'OC', 'OTHER CHARGES - GAS CHARGING BCO (RECHARGEABLE)', '', 1, 650.00, 550.85, 'SGST', 9, 49.58, 650.00),
+            new OrderItem(3, 'OC', 'OTHER CHARGES - TRANSPORT CHARGES', '', 1, 200.00, 169.49, 'CGST', 9, 15.25, 200.00)
+        };
+    }
+
+    @AuraEnabled
+    public static String generatePDF(String recordId) {
+        PageReference pdfPage = Page.vfpage; // Replace with your VF page name
+        pdfPage.getParameters().put('id', recordId); // Pass necessary parameters
+        Blob pdfBlob;
+        try {
+            pdfBlob = pdfPage.getContentAsPDF();
+        } catch (VisualforceException e) {
+            throw new AuraHandledException('Failed to generate PDF: ' + e.getMessage());
+        }
+        // Return the base64-encoded PDF
+        return EncodingUtil.base64Encode(pdfBlob);
+    }
+
+    @AuraEnabled
+    public static Id savePDFAsContent(String recordId) {
+        PageReference pdfPage = Page.vfpage; // Replace with your VF page name
+        pdfPage.getParameters().put('id', recordId); // Pass necessary parameters
+        Blob pdfBlob;
+        try {
+            pdfBlob = pdfPage.getContentAsPDF();
+        } catch (VisualforceException e) {
+            throw new AuraHandledException('Failed to generate PDF: ' + e.getMessage());
+        }
+
+        // Create ContentVersion
+        ContentVersion contentVersion = new ContentVersion();
+        contentVersion.Title = 'OrderDetails.pdf';
+        contentVersion.PathOnClient = 'OrderDetails.pdf';
+        contentVersion.VersionData = pdfBlob;
+        insert contentVersion;
+
+        // Get the ContentDocumentId
+        ContentDocumentLink contentDocumentLink = new ContentDocumentLink();
+        contentDocumentLink.ContentDocumentId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :contentVersion.Id].ContentDocumentId;
+        contentDocumentLink.LinkedEntityId = recordId;
+        contentDocumentLink.ShareType = 'V';
+        contentDocumentLink.Visibility = 'AllUsers';
+        insert contentDocumentLink;
+
+        return contentDocumentLink.Id;
+    }
+    public class OrderItem {
+        public Integer srNo { get; set; }
+        public String code { get; set; }
+        public String description { get; set; }
+        public String hsnCode { get; set; }
+        public Integer qty { get; set; }
+        public Decimal unitPrice { get; set; }
+        public Decimal taxAmt { get; set; }
+        public String gstType { get; set; }
+        public Integer gstPercentage { get; set; }
+        public Decimal gstAmt { get; set; }
+        public Decimal totalAmount { get; set; }
+
+        public OrderItem(Integer srNo, String code, String description, String hsnCode, Integer qty, Decimal unitPrice, Decimal taxAmt, String gstType, Integer gstPercentage, Decimal gstAmt, Decimal totalAmount) {
+            this.srNo = srNo;
+            this.code = code;
+            this.description = description;
+            this.hsnCode = hsnCode;
+            this.qty = qty;
+            this.unitPrice = unitPrice;
+            this.taxAmt = taxAmt;
+            this.gstType = gstType;
+            this.gstPercentage = gstPercentage;
+            this.gstAmt = gstAmt;
+            this.totalAmount = totalAmount;
+        }
+    }
+}
