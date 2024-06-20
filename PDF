@@ -1,38 +1,18 @@
 <template>
-    <lightning-button label="Generate PDF Preview" onclick={generatePDF}></lightning-button>
-    <template if:true={pdfData}>
-        <iframe src={pdfData} width="100%" height="600px"></iframe>
-        <lightning-button label="Save PDF" onclick={savePDF}></lightning-button>
-    </template>
+    <lightning-button label="Save PDF to Record" variant="brand" onclick={savePDF} class="slds-m-around_medium"></lightning-button>
 </template>
 
-
-
-import { LightningElement, api, track } from 'lwc';
-import generatePDF from '@salesforce/apex/OrderDetailsController.generatePDF';
+import { LightningElement, api } from 'lwc';
 import savePDFAsContent from '@salesforce/apex/OrderDetailsController.savePDFAsContent';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 
-export default class PdfGenerator extends LightningElement {
-    @api recordId;
-    @track pdfData;
-
-    generatePDF() {
-        generatePDF({ recordId: this.recordId })
-            .then(base64Data => {
-                this.pdfData = 'data:application/pdf;base64,' + base64Data;
-                this.showToast('Success', 'PDF generated successfully', 'success');
-            })
-            .catch(error => {
-                this.showToast('Error', 'Error generating PDF: ' + error.body.message, 'error');
-            });
-    }
+export default class PdfSaver extends LightningElement {
+    @api recordId; // Public property to pass the recordId to the component
 
     savePDF() {
         savePDFAsContent({ recordId: this.recordId })
-            .then(contentDocumentLinkId => {
-                this.showToast('Success', 'PDF saved successfully', 'success');
-                this.pdfData = null; // Clear the preview after saving
+            .then(() => {
+                this.showToast('Success', 'PDF saved to record successfully', 'success');
             })
             .catch(error => {
                 this.showToast('Error', 'Error saving PDF: ' + error.body.message, 'error');
@@ -51,6 +31,14 @@ export default class PdfGenerator extends LightningElement {
 
 
 
+
+
+
+
+
+
+
+
 public class OrderDetailsController {
     public List<OrderItem> orderDetails { get; set; }
 
@@ -63,24 +51,10 @@ public class OrderDetailsController {
         };
     }
 
-    @AuraEnabled
-    public static String generatePDF(String recordId) {
+   @AuraEnabled
+    public static void savePDFAsContent(String recordId) {
         PageReference pdfPage = Page.vfpage; // Replace with your VF page name
-        pdfPage.getParameters().put('id', recordId); // Pass necessary parameters
-        Blob pdfBlob;
-        try {
-            pdfBlob = pdfPage.getContentAsPDF();
-        } catch (VisualforceException e) {
-            throw new AuraHandledException('Failed to generate PDF: ' + e.getMessage());
-        }
-        // Return the base64-encoded PDF
-        return EncodingUtil.base64Encode(pdfBlob);
-    }
-
-    @AuraEnabled
-    public static Id savePDFAsContent(String recordId) {
-        PageReference pdfPage = Page.vfpage; // Replace with your VF page name
-        pdfPage.getParameters().put('id', recordId); // Pass necessary parameters
+        pdfPage.getParameters().put('id', recordId);
         Blob pdfBlob;
         try {
             pdfBlob = pdfPage.getContentAsPDF();
@@ -88,22 +62,14 @@ public class OrderDetailsController {
             throw new AuraHandledException('Failed to generate PDF: ' + e.getMessage());
         }
 
-        // Create ContentVersion
         ContentVersion contentVersion = new ContentVersion();
         contentVersion.Title = 'OrderDetails.pdf';
         contentVersion.PathOnClient = 'OrderDetails.pdf';
         contentVersion.VersionData = pdfBlob;
+        contentVersion.Origin = 'H';
+        contentVersion.FirstPublishLocationId = recordId;
         insert contentVersion;
-
-        // Get the ContentDocumentId
-        ContentDocumentLink contentDocumentLink = new ContentDocumentLink();
-        contentDocumentLink.ContentDocumentId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :contentVersion.Id].ContentDocumentId;
-        contentDocumentLink.LinkedEntityId = recordId;
-        contentDocumentLink.ShareType = 'V';
-        contentDocumentLink.Visibility = 'AllUsers';
-        insert contentDocumentLink;
-
-        return contentDocumentLink.Id;
+        // No return statement needed as the operation's success is handled by LWC
     }
     public class OrderItem {
         public Integer srNo { get; set; }
@@ -133,3 +99,6 @@ public class OrderDetailsController {
         }
     }
 }
+
+
+
